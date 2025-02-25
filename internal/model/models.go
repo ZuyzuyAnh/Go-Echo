@@ -9,7 +9,7 @@ type User struct {
 	Email       string `gorm:"size:100;not null;unique" json:"email"`
 	FullName    string `gorm:"size:100;not null" json:"full_name"`
 	Password    string `gorm:"size:255;not null" json:"password"`
-	PhoneNumber string `gorm:"type:text;not null;unique" json:"phone_number"`
+	PhoneNumber string `gorm:"size:20;not null;unique" json:"phone_number"`
 
 	Roles []Role `gorm:"many2many:user_roles;" json:"roles"`
 }

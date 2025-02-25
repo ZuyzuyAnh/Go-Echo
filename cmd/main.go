@@ -45,8 +45,6 @@ func main() {
 		e.Logger.Fatal(err)
 	}
 
-	db.AutoMigrate(&model.User{})
-
 	h := handler.NewHandler(db, *cfg)
 
 	e.POST("/register", h.Signup)
@@ -66,6 +64,10 @@ func initializeDB(dsn string) (*gorm.DB, error) {
 		&model.Movie{}, &model.Theater{}, &model.Seat{}, &model.Payment{}, &model.PaymentDetail{},
 		&model.MovieCategory{}, &model.MovieCategoryMapping{},
 	)
+
+	if err := BootstrapRolesAndPermissions(db); err != nil {
+		return nil, err
+	}
 
 	return db, nil
 }

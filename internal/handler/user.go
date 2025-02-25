@@ -10,18 +10,37 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
-func (h *Handler) Signup(c echo.Context) (err error) {
+func (h *Handler) Signup(c echo.Context) error {
 	req := new(dto.SignupRequest)
-
-	if err = c.Bind(req); err != nil {
-		return
+	if err := c.Bind(req); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid request"})
 	}
 
 	v := validator.NewValidator()
 	if req.Validate(v); !v.Valid() {
 		return c.JSON(http.StatusBadRequest, v.Errors)
+	}
+
+	tx := h.DB.Begin()
+	if tx.Error != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
+	}
+
+	var existingUser model.User
+	err := tx.Where("email = ? OR phone_number = ?", req.Email, req.PhoneNumber).First(&existingUser).Error
+	if err == nil {
+		if existingUser.Email == req.Email {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "Email already exists"})
+		}
+		if existingUser.PhoneNumber == req.PhoneNumber {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "Phone number already exists"})
+		}
+	} else if err != gorm.ErrRecordNotFound {
+		tx.Rollback()
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
 	}
 
 	u := &model.User{
@@ -31,9 +50,22 @@ func (h *Handler) Signup(c echo.Context) (err error) {
 		PhoneNumber: req.PhoneNumber,
 	}
 
-	db := h.DB
-	if err = db.Create(u).Error; err != nil {
-		return
+	if err := tx.Create(u).Error; err != nil {
+		tx.Rollback()
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create user"})
+	}
+
+	userRole := model.UserRole{
+		UserID: u.ID,
+		RoleID: 3,
+	}
+	if err := tx.Create(&userRole).Error; err != nil {
+		tx.Rollback()
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to assign role"})
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Transaction commit failed"})
 	}
 
 	res := &dto.SignUpResponse{
@@ -42,9 +74,7 @@ func (h *Handler) Signup(c echo.Context) (err error) {
 		PhoneNumber: u.PhoneNumber,
 	}
 
-	return c.JSON(http.StatusCreated, map[string]interface{}{
-		"user": res,
-	})
+	return c.JSON(http.StatusCreated, echo.Map{"user": res})
 }
 
 func (h *Handler) Login(c echo.Context) (err error) {
