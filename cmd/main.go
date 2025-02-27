@@ -76,8 +76,12 @@ func initializeDB(dsn string) (*sqlx.DB, error) {
 func setupRoutes(e *echo.Echo, db *sqlx.DB, logger *zap.Logger, secret string) {
 	ur := repository.NewUserRepository(db)
 	rr := repository.NewRoleRepository(db)
+	mr := repository.NewMovieRepository(db)
 
 	us := service.NewUserService(ur, rr)
+	ms := service.NewMovieService(mr)
+
+	mc := controller.NewMovieController(ms, logger)
 	uc := controller.NewUserController(us, logger, secret)
 
 	users := e.Group("/users")
@@ -85,5 +89,10 @@ func setupRoutes(e *echo.Echo, db *sqlx.DB, logger *zap.Logger, secret string) {
 		users.POST("/login", uc.Login)
 		users.POST("/register", uc.Register)
 		users.GET("/profile", uc.GetProfile)
+	}
+
+	movies := e.Group("/movies")
+	{
+		movies.POST("", mc.CreateMovie)
 	}
 }
