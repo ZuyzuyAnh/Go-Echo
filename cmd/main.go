@@ -2,17 +2,18 @@ package main
 
 import (
 	"echo-demo/config"
-	"echo-demo/internal/handler"
-	"echo-demo/internal/model"
-
+	"echo-demo/internal/controller"
+	"echo-demo/internal/repository"
+	"echo-demo/internal/service"
 	"fmt"
+	"github.com/jmoiron/sqlx"
+	"go.uber.org/zap"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
+	echomiddleware "github.com/labstack/echo/v4/middleware"
 	"github.com/labstack/gommon/log"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 )
 
 func main() {
@@ -27,12 +28,12 @@ func main() {
 	fmt.Println(cfg.DB_DSN)
 
 	e.Logger.SetLevel(log.ERROR)
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
+	e.Use(echomiddleware.Logger())
+	e.Use(echomiddleware.Recover())
 	e.Use(echojwt.WithConfig(echojwt.Config{
 		SigningKey: []byte(cfg.JWTSecret),
 		Skipper: func(c echo.Context) bool {
-			if c.Path() == "/login" || c.Path() == "/register" {
+			if c.Path() == "/users/login" || c.Path() == "/users/register" {
 				return true
 			}
 
@@ -45,29 +46,44 @@ func main() {
 		e.Logger.Fatal(err)
 	}
 
-	h := handler.NewHandler(db, *cfg)
-
-	e.POST("/register", h.Signup)
-	e.POST("/login", h.Login)
+	setupRoutes(e, db, initLogger(), cfg.JWTSecret)
 
 	e.Logger.Fatal(e.Start(":1323"))
 }
 
-func initializeDB(dsn string) (*gorm.DB, error) {
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+func initLogger() *zap.Logger {
+	config := zap.NewDevelopmentConfig()
+	config.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+
+	logger, err := config.Build()
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
+	defer logger.Sync()
 
-	db.AutoMigrate(
-		&model.User{}, &model.Role{}, &model.Permission{}, &model.RolePermission{}, &model.UserRole{},
-		&model.Movie{}, &model.Theater{}, &model.Seat{}, &model.Payment{}, &model.PaymentDetail{},
-		&model.MovieCategory{}, &model.MovieCategoryMapping{},
-	)
+	return logger
+}
 
-	if err := BootstrapRolesAndPermissions(db); err != nil {
-		return nil, err
+func initializeDB(dsn string) (*sqlx.DB, error) {
+	db, err := sqlx.Connect("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("connect db err: %v", err)
 	}
 
 	return db, nil
+}
+
+func setupRoutes(e *echo.Echo, db *sqlx.DB, logger *zap.Logger, secret string) {
+	ur := repository.NewUserRepository(db)
+	rr := repository.NewRoleRepository(db)
+
+	us := service.NewUserService(ur, rr)
+	uc := controller.NewUserController(us, logger, secret)
+
+	users := e.Group("/users")
+	{
+		users.POST("/login", uc.Login)
+		users.POST("/register", uc.Register)
+		users.GET("/profile", uc.GetProfile)
+	}
 }
