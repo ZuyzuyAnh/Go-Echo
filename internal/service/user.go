@@ -34,17 +34,15 @@ func (us *UserService) Register(request *dto.SignupRequest) (*dto.SignUpResponse
 	}
 
 	tx, err := us.UserRepo.DB.Beginx()
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	err = us.UserRepo.InsertUser(tx, &user)
 	if err != nil {
-		tx.Rollback()
 		return nil, err
 	}
 
 	err = us.RoleRepo.InsertUserRole(tx, user.ID, 3)
 	if err != nil {
-		tx.Rollback()
 		return nil, err
 	}
 

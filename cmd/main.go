@@ -93,6 +93,9 @@ func setupRoutes(e *echo.Echo, db *sqlx.DB, logger *zap.Logger, secret string) {
 
 	movies := e.Group("/movies")
 	{
+		movies.GET("/{id}", mc.GetMovieByID)
 		movies.POST("", mc.CreateMovie)
+		movies.PUT("/{id}", mc.UpdateMovie)
+		movies.DELETE("/{id}", mc.DeleteMovie)
 	}
 }

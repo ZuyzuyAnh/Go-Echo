@@ -9,4 +9,5 @@ import (
 type Executor interface {
 	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryRowxContext(ctx context.Context, query string, args ...interface{}) *sqlx.Row
+	QueryxContext(ctx context.Context, query string, args ...interface{}) (*sqlx.Rows, error)
 }

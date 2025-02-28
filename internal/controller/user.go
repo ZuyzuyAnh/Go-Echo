@@ -2,10 +2,8 @@ package controller
 
 import (
 	"echo-demo/internal/dto"
-	"echo-demo/internal/repository"
 	"echo-demo/internal/service"
 	"echo-demo/internal/validator"
-	"errors"
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 	"net/http"
@@ -25,25 +23,18 @@ func (uc *UserController) Register(c echo.Context) error {
 	req := new(dto.SignupRequest)
 	if err := c.Bind(req); err != nil {
 		uc.log.Error("Bind error", zap.Error(err))
-		return echo.NewHTTPError(http.StatusBadRequest, MSG_INVALIDS_REQUEST_BODY)
+		return sendErrorResponse(c, err)
 	}
 
 	v := validator.New()
 
 	if req.Validate(v); !v.Valid() {
-		return echo.NewHTTPError(http.StatusBadRequest, v.Errors)
+		return sendValidationErrors(c, v)
 	}
 
 	res, err := uc.UserService.Register(req)
 	if err != nil {
-		uc.log.Error("Register error", zap.Error(err))
-
-		var duplicateErr *repository.DuplicateError
-		if errors.As(err, &duplicateErr) {
-			return echo.NewHTTPError(http.StatusConflict, echo.Map{"error": duplicateErr.Error()})
-		}
-
-		return echo.NewHTTPError(http.StatusInternalServerError, echo.Map{"error": MSG_INTERNAL_SERVER_ERROR})
+		return sendErrorResponse(c, err)
 	}
 
 	return c.JSON(http.StatusOK, res)
@@ -52,22 +43,17 @@ func (uc *UserController) Register(c echo.Context) error {
 func (uc *UserController) Login(c echo.Context) error {
 	req := new(dto.LoginRequest)
 	if err := c.Bind(req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, MSG_INVALIDS_REQUEST_BODY)
+		return sendErrorResponse(c, err)
 	}
 
 	v := validator.New()
 	if req.Validate(v); !v.Valid() {
-		return echo.NewHTTPError(http.StatusBadRequest, v.Errors)
+		return sendValidationErrors(c, v)
 	}
 
 	res, err := uc.UserService.Login(req, uc.Secret)
 	if err != nil {
-		var notFoundErr *repository.NotFoundError
-		if errors.As(err, &notFoundErr) {
-			return echo.NewHTTPError(http.StatusNotFound, echo.Map{"error": notFoundErr.Error()})
-		}
-
-		return echo.NewHTTPError(http.StatusInternalServerError, echo.Map{"error": MSG_INTERNAL_SERVER_ERROR})
+		return sendErrorResponse(c, err)
 	}
 
 	return c.JSON(http.StatusOK, res)
@@ -76,17 +62,12 @@ func (uc *UserController) Login(c echo.Context) error {
 func (uc *UserController) GetProfile(c echo.Context) error {
 	id, err := readUserID(c)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		return sendErrorResponse(c, err)
 	}
 
 	res, err := uc.UserService.Profile(id)
 	if err != nil {
-		var notFoundErr *repository.NotFoundError
-		if errors.As(err, &notFoundErr) {
-			return echo.NewHTTPError(http.StatusNotFound, echo.Map{"error": notFoundErr.Error()})
-		}
-
-		return echo.NewHTTPError(http.StatusInternalServerError, echo.Map{"error": MSG_INTERNAL_SERVER_ERROR})
+		return sendErrorResponse(c, err)
 	}
 
 	return c.JSON(http.StatusOK, res)
